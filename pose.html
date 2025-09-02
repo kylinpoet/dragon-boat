@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>龙舟动作识别系统</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .webcam-container {
+            display: flex;
+            justify-content: center;
+            margin: 15px 0;
+            position: relative;
+        }
+        #canvas {
+            border-radius: 4px;
+            border: 2px solid #3498db;
+            width: 400px;
+            height: 400px;
+        }
+        #process-canvas {
+            position: absolute;
+            left: -9999px;
+            width: 200px;
+            height: 200px;
+        }
+        .controls {
+            text-align: center;
+            margin: 15px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .performance-hint {
+            text-align: center;
+            font-size: 12px;
+            color: #7f8c8d;
+            margin: 5px 0;
+        }
+        .predictions {
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            opacity: 0.7;
+        }
+        .prediction-item {
+            background-color: #ecf0f1;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .prediction-label {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        .progress-bar {
+            height: 15px;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #2ecc71;
+            width: 0%;
+            transition: width 0.2s;
+        }
+        .feedback {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            text-align: center;
+        }
+        .action-sequence {
+            margin-top: 15px;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+        }
+        .correct {
+            color: #27ae60;
+        }
+        .incorrect {
+            color: #e74c3c;
+        }
+        .progress-container {
+            margin-top: 15px;
+            text-align: center;
+        }
+        .progress-text {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .completion-bar {
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 auto;
+            width: 80%;
+            position: relative;
+            display: flex; /* 使用flex布局使分段并排 */
+        }
+        .completion-segment {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        .segment-start {
+            background-color: #3498db; /* 蓝色表示起手式 */
+            width: 0%; /* 初始宽度为0 */
+        }
+        .segment-enter {
+            background-color: #f1c40f; /* 黄色表示入水式 */
+            width: 0%; /* 初始宽度为0 */
+        }
+        .segment-pull {
+            background-color: #2ecc71; /* 绿色表示拉桨式 */
+            width: 0%; /* 初始宽度为0 */
+        }
+        .counter {
+            margin-top: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .success-counter {
+            margin-top: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #27ae60;
+            text-align: center;
+            padding: 10px;
+            background-color: #e8f8f0;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            gap: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>龙舟动作识别系统</h1>
+        
+        <div class="controls">
+            <button type="button" onclick="init()">开始识别</button>
+            <div class="performance-hint">提示：确保摄像头清晰可见，动作连贯流畅</div>
+        </div>
+        
+        <div class="webcam-container">
+            <canvas id="canvas"></canvas>
+            <canvas id="process-canvas"></canvas>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-text">动作完成进度</div>
+            <div class="completion-bar" id="completion-bar">
+                <div class="completion-segment segment-start" id="segment-start"></div>
+                <div class="completion-segment segment-enter" id="segment-enter"></div>
+                <div class="completion-segment segment-pull" id="segment-pull"></div>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #3498db;"></div>
+                    <span>起手式</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #f1c40f;"></div>
+                    <span>入水式</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2ecc71;"></div>
+                    <span>拉桨式</span>
+                </div>
+            </div>
+            <div class="counter">当前动作序列: <span id="current-sequence">无</span></div>
+        </div>
+        
+        <div class="success-counter">
+            成功完成划桨动作: <span id="completed-count">0</span> 次
+        </div>
+        
+        <div class="feedback" id="feedback">
+            <p>等待动作识别...</p>
+            <div class="action-sequence" id="action-sequence"></div>
+        </div>
+        
+        <div class="predictions" id="label-container"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+    <script type="text/javascript">
+        // 模型URL
+        const URL = "./my_model/";
+        let model, webcam, ctx, processCtx, labelContainer, maxPredictions;
+        let isRunning = false;
+        
+        // 动作定义（注意顺序与模型标签ID一致）
+        const ACTIONS = {
+            ENTER: "入水式",
+            START: "起手式",
+            NORMAL: "平复式",
+            PULL: "拉桨式"
+        };
+        
+        // 正确动作序列
+        const CORRECT_SEQUENCE = [ACTIONS.START, ACTIONS.ENTER, ACTIONS.PULL];
+        
+        // 动作记录
+        let actionHistory = [];
+        let currentSequence = [];
+        let isSequenceCorrect = false;
+        let lastActionTime = 0;
+        const SEQUENCE_TIMEOUT = 1500; // 1.5秒内完成动作序列
+        let frameCount = 0;
+        const FRAME_SKIP = 2; // 每3帧处理一次，减少计算量
+        let completedCount = 0; // 完成次数计数器
+
+        async function init() {
+            if (isRunning) return;
+            isRunning = true;
+            
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                // 重置计数器
+                completedCount = 0;
+                document.getElementById('completed-count').textContent = "0";
+                
+                // 加载模型和元数据
+                model = await tmPose.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                // 设置摄像头
+                const size = 200; // 实际处理大小为200x200
+                const flip = true;
+                webcam = new tmPose.Webcam(size, size, flip);
+                await webcam.setup();
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                // 获取DOM元素
+                const canvas = document.getElementById("canvas");
+                const processCanvas = document.getElementById("process-canvas");
+                canvas.width = 400; 
+                canvas.height = 400;
+                processCanvas.width = size;
+                processCanvas.height = size;
+                ctx = canvas.getContext("2d");
+                processCtx = processCanvas.getContext("2d");
+                labelContainer = document.getElementById("label-container");
+                
+                // 清空标签容器
+                labelContainer.innerHTML = '';
+                
+                // 创建预测结果显示元素
+                for (let i = 0; i < maxPredictions; i++) {
+                    const predictionItem = document.createElement("div");
+                    predictionItem.className = "prediction-item";
+                    
+                    const label = document.createElement("div");
+                    label.className = "prediction-label";
+                    label.textContent = Object.values(ACTIONS)[i];
+                    
+                    const progressContainer = document.createElement("div");
+                    progressContainer.className = "progress-bar";
+                    
+                    const progress = document.createElement("div");
+                    progress.className = "progress";
+                    progress.id = `progress-${i}`;
+                    
+                    progressContainer.appendChild(progress);
+                    predictionItem.appendChild(label);
+                    predictionItem.appendChild(progressContainer);
+                    labelContainer.appendChild(predictionItem);
+                }
+                
+                // 初始化进度条为0
+                resetProgressBar();
+                
+                updateFeedback("系统已启动，请开始划桨动作", false);
+            } catch (error) {
+                console.error("初始化错误:", error);
+                updateFeedback("初始化失败: " + error.message, false);
+                isRunning = false;
+            }
+        }
+
+        // 重置进度条
+        function resetProgressBar() {
+            document.getElementById('segment-start').style.width = "0%";
+            document.getElementById('segment-enter').style.width = "0%";
+            document.getElementById('segment-pull').style.width = "0%";
+        }
+
+        async function loop(timestamp) {
+            if (!isRunning) return;
+            
+            frameCount++;
+            if (frameCount % FRAME_SKIP === 0) {
+                webcam.update();
+                await predict();
+            }
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            try {
+                // 将视频帧绘制到处理画布
+                processCtx.drawImage(webcam.canvas, 0, 0);
+                
+                // 姿势估计
+                const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
+                // 动作分类
+                const prediction = await model.predict(posenetOutput);
+
+                // 更新预测结果
+                let highestProb = 0;
+                let currentAction = ACTIONS.NORMAL;
+                
+                for (let i = 0; i < maxPredictions; i++) {
+                    const probability = prediction[i].probability;
+                    const progress = document.getElementById(`progress-${i}`);
+                    progress.style.width = `${probability * 100}%`;
+                    
+                    // 找出概率最高的动作
+                    if (probability > highestProb && probability > 0.7) {
+                        highestProb = probability;
+                        currentAction = Object.values(ACTIONS)[i];
+                    }
+                }
+                
+                // 记录动作
+                if (highestProb > 0.7 && currentAction !== ACTIONS.NORMAL) {
+                    const now = Date.now();
+                    
+                    // 避免重复记录相同的动作
+                    if (actionHistory.length === 0 || 
+                        (actionHistory[actionHistory.length - 1].action !== currentAction || 
+                         now - actionHistory[actionHistory.length - 1].time > 500)) {
+                        
+                        actionHistory.push({
+                            action: currentAction,
+                            time: now
+                        });
+                        
+                        // 检查动作序列
+                        checkActionSequence(currentAction, now);
+                    }
+                }
+                
+                // 绘制姿势到显示画布
+                drawPose(pose);
+            } catch (error) {
+                console.error("预测错误:", error);
+            }
+        }
+
+        function checkActionSequence(currentAction, currentTime) {
+            // 如果当前动作是起手式，开始新的序列
+            if (currentAction === ACTIONS.START) {
+                currentSequence = [currentAction];
+                lastActionTime = currentTime;
+                updateFeedback("检测到起手式，请继续完成划桨动作", false);
+                updateCurrentSequenceDisplay();
+                updateCompletionProgress();
+                return;
+            }
+            
+            // 如果已经有起手式，检查后续动作
+            if (currentSequence.length > 0 && currentSequence[0] === ACTIONS.START) {
+                // 检查是否超时
+                if (currentTime - lastActionTime > SEQUENCE_TIMEOUT) {
+                    updateFeedback("动作太慢，请重新开始划桨", false);
+                    resetProgressBar();
+                    currentSequence = [];
+                    updateCurrentSequenceDisplay();
+                    return;
+                }
+                
+                // 避免重复添加相同的动作
+                if (currentSequence[currentSequence.length - 1] !== currentAction) {
+                    // 检查是否符合正确的序列顺序
+                    if (currentSequence.length === 1 && currentAction === ACTIONS.ENTER) {
+                        // 起手式后接的是入水式，正确
+                        currentSequence.push(currentAction);
+                        lastActionTime = currentTime;
+                        updateCurrentSequenceDisplay();
+                        updateCompletionProgress();
+                    } else if (currentSequence.length === 2 && currentAction === ACTIONS.PULL && 
+                              currentSequence[1] === ACTIONS.ENTER) {
+                        // 起手式+入水式后接的是拉桨式，正确
+                        currentSequence.push(currentAction);
+                        lastActionTime = currentTime;
+                        updateCurrentSequenceDisplay();
+                        updateCompletionProgress();
+                    } else {
+                        // 错误的动作顺序
+                        updateFeedback("动作顺序不正确，请按照起手→入水→拉桨的顺序", false);
+                        resetProgressBar();
+                        currentSequence = [];
+                        updateCurrentSequenceDisplay();
+                        return;
+                    }
+                }
+                
+                // 检查序列是否完整
+                if (arraysEqual(currentSequence, CORRECT_SEQUENCE)) {
+                    updateFeedback("动作完整且正确！👍", true);
+                    completedCount++;
+                    console.log(completedCount);
+                    document.getElementById('completed-count').textContent = completedCount;
+                    
+                    // 短暂显示完整进度后重置
+                    setTimeout(() => {
+                        resetProgressBar();
+                        currentSequence = [];
+                        updateCurrentSequenceDisplay();
+                        updateFeedback("准备下一次动作识别...", false);
+                    }, 1500);
+                } else {
+                    updateFeedback(`当前动作: ${currentAction}`, false);
+                }
+            }
+        }
+
+        function updateCurrentSequenceDisplay() {
+            const sequenceElement = document.getElementById("current-sequence");
+            if (currentSequence.length > 0) {
+                sequenceElement.textContent = currentSequence.join(" → ");
+            } else {
+                sequenceElement.textContent = "无";
+            }
+        }
+
+        function updateCompletionProgress() {
+            const segmentStart = document.getElementById('segment-start');
+            const segmentEnter = document.getElementById('segment-enter');
+            const segmentPull = document.getElementById('segment-pull');
+            
+            // 根据当前序列更新进度显示
+            if (currentSequence.length === 1 && currentSequence[0] === ACTIONS.START) {
+                segmentStart.style.width = "33.33%";
+                segmentEnter.style.width = "0%";
+                segmentPull.style.width = "0%";
+            } else if (currentSequence.length === 2 && 
+                      currentSequence[0] === ACTIONS.START && 
+                      currentSequence[1] === ACTIONS.ENTER) {
+                segmentStart.style.width = "33.33%";
+                segmentEnter.style.width = "33.33%";
+                segmentPull.style.width = "0%";
+            } else if (currentSequence.length === 3 && 
+                       currentSequence[0] === ACTIONS.START && 
+                       currentSequence[1] === ACTIONS.ENTER && 
+                       currentSequence[2] === ACTIONS.PULL) {
+                segmentStart.style.width = "33.33%";
+                segmentEnter.style.width = "33.33%";
+                segmentPull.style.width = "33.33%";
+            }
+        }
+
+        function arraysEqual(arr1, arr2) {
+            if (arr1.length !== arr2.length) return false;
+            for (let i = 0; i < arr1.length; i++) {
+                if (arr1[i] !== arr2[i]) return false;
+            }
+            return true;
+        }
+
+        function updateFeedback(message, isCorrect) {
+            const feedbackElement = document.getElementById("feedback");
+            const sequenceElement = document.getElementById("action-sequence");
+            if (message=="动作完整且正确！👍") {
+            	                    completedCount++;
+                    console.log(completedCount);
+                    document.getElementById('completed-count').textContent = completedCount;
+            }
+            feedbackElement.innerHTML = `<p>${message}</p>`;
+            
+            if (currentSequence.length > 0) {
+                sequenceElement.innerHTML = `当前序列: <span class="${isCorrect ? 'correct' : 'incorrect'}">${currentSequence.join(" → ")}</span>`;
+            } else {
+                sequenceElement.innerHTML = "";
+            }
+            
+            if (isCorrect) {
+                feedbackElement.style.borderLeftColor = "#2ecc71";
+            } else {
+                feedbackElement.style.borderLeftColor = "#3498db";
+            }
+        }
+
+        function drawPose(pose) {
+            const canvas = document.getElementById("canvas");
+            const processCanvas = document.getElementById("process-canvas");
+            
+            if (canvas && processCanvas) {
+                // 将处理画布内容放大绘制到显示画布
+                ctx.drawImage(processCanvas, 0, 0, canvas.width, canvas.height);
+                
+                if (pose) {
+                    const minPartConfidence = 0.5;
+                    // 调整关键点和骨架的绘制比例
+                    const scale = canvas.width / processCanvas.width;
+                    ctx.save();
+                    ctx.scale(scale, scale);
+                    tmPose.drawKeypoints(pose.keypoints, minPartConfidence, ctx);
+                    tmPose.drawSkeleton(pose.keypoints, minPartConfidence, ctx);
+                    ctx.restore();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
